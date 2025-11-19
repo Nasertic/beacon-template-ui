@@ -1,4 +1,4 @@
 {
-  "API_URL": "https://beacon-network-backend-test.ega-archive.org/api",
+  "API_URL": "https://impact-beacon.nasertic.es/api",
   "REDIRECT_URL": "http://localhost:3000/"
 }
