@@ -32,7 +32,11 @@ import ResultsTableRow from "./ResultsTableRow";
 import { loadNetworkMembersWithMaturity } from "./utils/networkMembers";
 import CohortsTable from "./CohortsTable";
 import DatasetsTable from "./DatasetsTable";
-import { getBeaconAggregationInfo, getDatasetType } from "./utils/beaconType";
+import {
+  getBeaconAggregationInfo,
+  getDatasetType,
+  getDatasetResponse,
+} from "./utils/beaconType";
 
 const ResultsTableModal = lazy(() => import("./modal/ResultsTableModal"));
 
@@ -229,6 +233,7 @@ export default function ResultsTable() {
                         },
                       }}
                     >
+                      {/* Beacon and Dataset name */}
                       <TableCell
                         data-cy="results-table-cell-id"
                         sx={{ fontWeight: "bold" }}
@@ -268,11 +273,28 @@ export default function ResultsTable() {
                           )}
 
                           <span data-cy="results-table-id-value">
-                            {item.beaconId ? item.beaconId : item.id}
+                            {item.beaconId || item.id || "Unavailable"}
                           </span>
                         </Box>
                       </TableCell>
 
+                      {/* Beacon Maturity — ONLY for network beacons. This is skipped for Single Beacons */}
+                      {config.beaconType === "networkBeacon" && (
+                        <TableCell
+                          sx={{ fontWeight: "bold" }}
+                          style={{
+                            width: BEACON_NETWORK_COLUMNS[1].width,
+                          }}
+                        >
+                          {(() => {
+                            const status =
+                              item.maturity || (item.exists ? "PROD" : "DEV");
+                            return getBeaconStatusLabel(status);
+                          })()}
+                        </TableCell>
+                      )}
+
+                      {/* N of Datasets Column in the Network */}
                       {config.beaconType !== "singleBeacon" && (
                         <TableCell
                           sx={{ fontWeight: "bold" }}
@@ -286,6 +308,7 @@ export default function ResultsTable() {
                         </TableCell>
                       )}
 
+                      {/* Response Column */}
                       <TableCell
                         sx={{ fontWeight: "bold" }}
                         style={{
@@ -294,38 +317,65 @@ export default function ResultsTable() {
                           )?.width,
                         }}
                       >
-                        {beaconType === "boolean" &&
-                          (item.exists ? (
-                            "Yes"
-                          ) : (
-                            <Tooltip
-                              title={
-                                getErrors(item.info) ||
-                                "Beacon responded No under HIT mode"
-                              }
-                            >
-                              <ReportProblemIcon sx={{ color: "#FF8A8A" }} />
-                            </Tooltip>
-                          ))}
+                        {/* Network Beacon logic to render correct values in the response */}
+                        {config.beaconType === "networkBeacon" && (
+                          <>
+                            {beaconType === "boolean" &&
+                              (item.exists ? (
+                                "Yes"
+                              ) : (
+                                <Tooltip
+                                  title={
+                                    getErrors(item.info) ||
+                                    "Beacon returned a negative response under HIT mode"
+                                  }
+                                >
+                                  <ReportProblemIcon
+                                    sx={{ color: "#FF8A8A" }}
+                                  />
+                                </Tooltip>
+                              ))}
 
-                        {beaconType === "count" &&
-                          new Intl.NumberFormat(navigator.language).format(
-                            item.totalResultsCount
-                          )}
-
-                        {beaconType === "record" &&
-                          (item.totalResultsCount > 0
-                            ? new Intl.NumberFormat(navigator.language).format(
+                            {beaconType === "count" &&
+                              new Intl.NumberFormat(navigator.language).format(
                                 item.totalResultsCount
-                              )
-                            : "-")}
+                              )}
 
-                        {item.description && (
-                          <Tooltip
-                            title={
-                              item.description ? item.description : item.name
+                            {beaconType === "record" &&
+                              (item.totalResultsCount > 0
+                                ? new Intl.NumberFormat(
+                                    navigator.language
+                                  ).format(item.totalResultsCount)
+                                : "-")}
+                          </>
+                        )}
+
+                        {/* Single Beacons logic to render correct values in the response */}
+                        {config.beaconType === "singleBeacon" &&
+                          (() => {
+                            const responses = item.items.map((ds) =>
+                              getDatasetResponse(ds)
+                            );
+                            const numericValues = responses.filter(
+                              (r) => typeof r === "number"
+                            );
+
+                            if (numericValues.length > 0) {
+                              const total = numericValues.reduce(
+                                (sum, n) => sum + n,
+                                0
+                              );
+                              return new Intl.NumberFormat(
+                                navigator.language
+                              ).format(total);
                             }
-                          >
+
+                            return "Yes";
+                          })()}
+
+                        {/* Info icon same for both modes */}
+                        {item.description && (
+                          <Tooltip title={item.description || item.name}>
                             <IconButton>
                               <InfoIcon
                                 sx={{ color: config.ui.colors.primary }}
@@ -335,96 +385,7 @@ export default function ResultsTable() {
                         )}
                       </TableCell>
 
-                      {/* {config.beaconType === "singleBeacon" && (
-                        <TableCell
-                          style={{
-                            width: BEACON_NETWORK_COLUMNS[4].width,
-                          }}
-                        >
-                          {(() => {
-                            const dataset = item.items?.[0];
-                            if (!dataset) return <i>Unavailable jjgjjgj </i>;
-
-                            // CASE 1: COUNT → Unavailable
-                            if (dataset.responseType === "Count") {
-                              return <i>Unavailable jfdjfdshj</i>;
-                            }
-
-                            // CASE 2: RECORD → with or without data
-                            if (dataset.responseType === "Record") {
-                              const hasData =
-                                dataset.results && dataset.results.length > 0;
-
-                              return (
-                                <Tooltip
-                                  title={
-                                    hasData
-                                      ? "View dataset details"
-                                      : "No details available (empty result)"
-                                  }
-                                  arrow
-                                >
-                                  <span>
-                                    <Button
-                                      onClick={() =>
-                                        hasData &&
-                                        handleOpenModal({
-                                          beaconId: item.beaconId,
-                                          datasetId:
-                                            dataset.dataset || dataset.id,
-                                          dataTable: dataset.results || [],
-                                          displayedCount:
-                                            item.totalResultsCount || 0,
-                                          actualLoadedCount:
-                                            dataset.results?.length || 0,
-                                          headers: dataset.headers || [],
-                                        })
-                                      }
-                                      variant="outlined"
-                                      startIcon={<CalendarViewMonthIcon />}
-                                      disabled={!hasData}
-                                      sx={{
-                                        textTransform: "none",
-                                        fontSize: "13px",
-                                        fontWeight: 400,
-                                        fontFamily: '"Open Sans", sans-serif',
-                                        color: hasData
-                                          ? config.ui.colors.darkPrimary
-                                          : "#999",
-                                        borderColor: hasData
-                                          ? config.ui.colors.darkPrimary
-                                          : "#ccc",
-                                        borderRadius: "8px",
-                                        px: 1.5,
-                                        py: 0.5,
-                                        minHeight: "28px",
-                                        minWidth: "84px",
-                                        "& .MuiButton-startIcon": {
-                                          marginRight: "6px",
-                                          color: hasData
-                                            ? config.ui.colors.darkPrimary
-                                            : "#bbb",
-                                        },
-                                        "&:hover": {
-                                          backgroundColor: hasData
-                                            ? `${config.ui.colors.darkPrimary}10`
-                                            : "transparent",
-                                        },
-                                      }}
-                                    >
-                                      Details
-                                    </Button>
-                                  </span>
-                                </Tooltip>
-                              );
-                            }
-
-                            // CASE 3: BOOLEAN or other → Unavailable
-                            return <i>Unavailabdndnsdnnsle</i>;
-                          })()}
-                        </TableCell>
-                      )} */}
-
+                      {/* Details Table logic rendering for Single Beacons */}
                       {config.beaconType === "singleBeacon" && (
                         <TableCell
                           style={{
@@ -433,92 +394,100 @@ export default function ResultsTable() {
                         >
                           {(() => {
                             const dataset = item.items?.[0];
-                            if (!dataset) return <i>Unavailable</i>;
 
-                            const datasetType = getDatasetType(dataset);
-                            const hasData =
-                              Array.isArray(dataset.results) &&
-                              dataset.results.length > 0;
-
-                            if (datasetType === "count") {
+                            if (!dataset || !dataset.exists) {
                               return <i>Unavailable</i>;
                             }
 
-                            if (datasetType === "boolean") {
+                            const hasId = !!dataset.dataset || !!dataset.id;
+                            const hasCount =
+                              typeof dataset.resultsCount === "number" &&
+                              !Number.isNaN(dataset.resultsCount);
+                            const hasArray = Array.isArray(dataset.results);
+                            const arrayLength = hasArray
+                              ? dataset.results.length
+                              : 0;
+                            const hasData = arrayLength > 0;
+
+                            // Scenario 1 — exists only
+                            if (!hasId && !hasCount) {
                               return <i>Unavailable</i>;
                             }
 
-                            if (datasetType === "record") {
-                              return (
-                                <Tooltip
-                                  title={
-                                    hasData
-                                      ? "View dataset details"
-                                      : "No details available (empty result)"
-                                  }
-                                  arrow
-                                >
-                                  <span>
-                                    <Button
-                                      onClick={() =>
-                                        hasData &&
-                                        handleOpenModal({
-                                          beaconId: item.beaconId,
-                                          datasetId:
-                                            dataset.dataset || dataset.id,
-                                          dataTable: dataset.results || [],
-                                          displayedCount:
-                                            item.totalResultsCount || 0,
-                                          actualLoadedCount:
-                                            dataset.results?.length || 0,
-                                          headers: dataset.headers || [],
-                                        })
-                                      }
-                                      variant="outlined"
-                                      startIcon={<CalendarViewMonthIcon />}
-                                      disabled={!hasData}
-                                      sx={{
-                                        textTransform: "none",
-                                        fontSize: "13px",
-                                        fontWeight: 400,
-                                        fontFamily: '"Open Sans", sans-serif',
+                            // Scenario 2 — exists + id only (no count, no results array)
+                            if (hasId && !hasCount && !hasArray) {
+                              return <i>Unavailable</i>;
+                            }
+
+                            // Scenario 3 — exists + count ONLY (results array missing)
+                            if (hasCount && !hasArray) {
+                              return <i>Unavailable</i>;
+                            }
+
+                            // Scenario 4 — exists + count + empty results[]
+                            const tooltipTitle = hasData
+                              ? "View dataset details"
+                              : "No details available (empty result)";
+
+                            return (
+                              <Tooltip title={tooltipTitle} arrow>
+                                <span>
+                                  <Button
+                                    onClick={() =>
+                                      hasData &&
+                                      handleOpenModal({
+                                        beaconId: item.beaconId,
+                                        datasetId:
+                                          dataset.dataset || dataset.id,
+                                        dataTable: dataset.results || [],
+                                        displayedCount:
+                                          item.totalResultsCount || 0,
+                                        actualLoadedCount: arrayLength,
+                                        headers: dataset.headers || [],
+                                      })
+                                    }
+                                    variant="outlined"
+                                    startIcon={<CalendarViewMonthIcon />}
+                                    disabled={!hasData}
+                                    sx={{
+                                      textTransform: "none",
+                                      fontSize: "13px",
+                                      fontWeight: 400,
+                                      fontFamily: '"Open Sans", sans-serif',
+                                      color: hasData
+                                        ? config.ui.colors.darkPrimary
+                                        : "#999",
+                                      borderColor: hasData
+                                        ? config.ui.colors.darkPrimary
+                                        : "#ccc",
+                                      borderRadius: "8px",
+                                      px: 1.5,
+                                      py: 0.5,
+                                      minHeight: "28px",
+                                      minWidth: "84px",
+                                      "& .MuiButton-startIcon": {
+                                        marginRight: "6px",
                                         color: hasData
                                           ? config.ui.colors.darkPrimary
-                                          : "#999",
-                                        borderColor: hasData
-                                          ? config.ui.colors.darkPrimary
-                                          : "#ccc",
-                                        borderRadius: "8px",
-                                        px: 1.5,
-                                        py: 0.5,
-                                        minHeight: "28px",
-                                        minWidth: "84px",
-                                        "& .MuiButton-startIcon": {
-                                          marginRight: "6px",
-                                          color: hasData
-                                            ? config.ui.colors.darkPrimary
-                                            : "#bbb",
-                                        },
-                                        "&:hover": {
-                                          backgroundColor: hasData
-                                            ? `${config.ui.colors.darkPrimary}10`
-                                            : "transparent",
-                                        },
-                                      }}
-                                    >
-                                      Details
-                                    </Button>
-                                  </span>
-                                </Tooltip>
-                              );
-                            }
-
-                            // Fallback
-                            return <i>Unavailable</i>;
+                                          : "#bbb",
+                                      },
+                                      "&:hover": {
+                                        backgroundColor: hasData
+                                          ? `${config.ui.colors.darkPrimary}10`
+                                          : "transparent",
+                                      },
+                                    }}
+                                  >
+                                    Details
+                                  </Button>
+                                </span>
+                              </Tooltip>
+                            );
                           })()}
                         </TableCell>
                       )}
 
+                      {/* Contact */}
                       <TableCell
                         style={{
                           width: BEACON_NETWORK_COLUMNS.find(

@@ -11,13 +11,29 @@ export const mockSingleBeaconResponse = {
     resultSets: [
       {
         exists: true,
-        id: "EGA0",
+        setType: "dataset",
+      },
+      {
+        exists: false,
+        setType: "dataset",
+      },
+      {
+        exists: true,
+        id: "EGA00",
         setType: "dataset",
       },
       {
         exists: true,
         id: "EGA1",
         resultsCount: 8,
+        setType: "dataset",
+      },
+
+      {
+        exists: true,
+        id: "EGA3",
+        resultsCount: 4,
+        results: [],
         setType: "dataset",
       },
       {
@@ -30,13 +46,30 @@ export const mockSingleBeaconResponse = {
         ],
         setType: "dataset",
       },
-      {
-        exists: true,
-        id: "EGA3",
-        resultsCount: 4,
-        results: [],
-        setType: "dataset",
-      },
     ],
   },
+};
+
+
+export const mockMapNoDatasets = {
+  meta: { apiVersion: "2.0" },
+  response: {
+    entryTypes: [
+      {
+        id: "individuals",
+        name: "Individuals",
+        pathSegment: "individuals"
+      },
+      {
+        id: "biosamples",
+        name: "Biosamples",
+        pathSegment: "biosamples"
+      },
+      {
+        id: "g_variants",
+        name: "Genomic Variants",
+        pathSegment: "g_variants"
+      }
+    ]
+  }
 };
